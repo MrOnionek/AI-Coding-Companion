@@ -1,8 +1,13 @@
 package dev.onion.aicoding.settings;
 
+import dev.onion.aicoding.project.RecentProject;
+import java.util.ArrayList;
+import java.util.List;
+
 public class Settings {
 
     private String lastProjectPath = "";
+    private final List<RecentProject> recentProjects = new ArrayList<>();
     private boolean darkTheme = true;
     private boolean autoStartWatcher = true;
 
@@ -12,6 +17,10 @@ public class Settings {
 
     public void setLastProjectPath(String lastProjectPath) {
         this.lastProjectPath = lastProjectPath;
+    }
+
+    public List<RecentProject> getRecentProjects() {
+        return recentProjects;
     }
 
     public boolean isDarkTheme() {

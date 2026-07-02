@@ -10,10 +10,11 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.Consumer;
 
-public class FolderWatcher {
+public class FolderWatcher implements AutoCloseable {
 
     private final Path projectPath;
     private final WatchService watchService;
@@ -33,6 +34,8 @@ public class FolderWatcher {
 
             try {
                 key = watchService.take();
+            } catch (ClosedWatchServiceException e) {
+                return;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -64,6 +67,11 @@ public class FolderWatcher {
                 break;
             }
         }
+    }
+
+    @Override
+    public void close() throws IOException {
+        watchService.close();
     }
 
     private void registerAll(Path start) throws IOException {

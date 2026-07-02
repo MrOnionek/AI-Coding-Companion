@@ -2,9 +2,28 @@ package dev.onion.aicoding.app;
 
 import dev.onion.aicoding.ui.MainWindow;
 import javafx.application.Application;
+import javafx.stage.Stage;
 
-public class App {
+public class App extends Application {
+
+    private AppContext context;
+    private MainWindow mainWindow;
+
+    @Override
+    public void start(Stage stage) {
+        context = new AppContext();
+        mainWindow = new MainWindow(context);
+        mainWindow.show(stage);
+    }
+
+    @Override
+    public void stop() {
+        if (context != null) {
+            context.projectManager().closeProject();
+        }
+    }
+
     public static void main(String[] args) {
-        Application.launch(MainWindow.class, args);
+        launch(args);
     }
 }

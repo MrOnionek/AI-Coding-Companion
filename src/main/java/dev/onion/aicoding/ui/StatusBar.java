@@ -10,7 +10,7 @@ public class StatusBar extends HBox {
     public StatusBar() {
         setStyle("-fx-padding: 8; -fx-background-color: #101010;");
 
-        statusLabel = new Label("Starting...");
+        statusLabel = new Label("No project open");
         statusLabel.setStyle("-fx-text-fill: #88ff88;");
 
         getChildren().add(statusLabel);

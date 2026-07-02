@@ -1,26 +1,28 @@
 package dev.onion.aicoding.ui;
 
-import dev.onion.aicoding.git.GitService;
-import dev.onion.aicoding.watcher.FolderWatcher;
-import javafx.application.Application;
+import dev.onion.aicoding.app.AppContext;
+import dev.onion.aicoding.project.ProjectManager;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
-public class MainWindow extends Application {
-
-    private static final String PROJECT_PATH =
-            "C:\\Users\\Szymon\\Downloads\\myminecraft-movement-aware-builder";
+public class MainWindow {
 
     private Sidebar sidebar;
     private DiffViewer diffViewer;
     private ReviewPanel reviewPanel;
     private PromptPanel promptPanel;
     private StatusBar statusBar;
+    private Stage stage;
+    private final ProjectManager projectManager;
 
-    @Override
-    public void start(Stage stage) {
+    public MainWindow(AppContext context) {
+        this.projectManager = context.projectManager();
+    }
+
+    public void show(Stage stage) {
+        this.stage = stage;
         sidebar = new Sidebar();
         diffViewer = new DiffViewer();
         reviewPanel = new ReviewPanel();
@@ -36,6 +38,7 @@ public class MainWindow extends Application {
         root.setBottom(promptPanel);
 
         BorderPane outer = new BorderPane();
+        outer.setTop(new Toolbar(this::chooseProject));
         outer.setCenter(root);
         outer.setBottom(statusBar);
 
@@ -45,41 +48,34 @@ public class MainWindow extends Application {
         stage.setScene(scene);
         stage.show();
 
-        startWatcher();
+        subscribeToProjectEvents();
+        projectManager.reopenLastProject();
     }
 
-    private void startWatcher() {
-        Thread watcherThread = new Thread(() -> {
-            try {
-                GitService gitService = new GitService(PROJECT_PATH);
-
-                FolderWatcher watcher = new FolderWatcher(
-                        PROJECT_PATH,
-                        changedFile -> Platform.runLater(() -> {
-                            sidebar.addChangedFile(changedFile);
-                            statusBar.setStatus("Detected: " + changedFile.getFileName());
-
-                            String diff = gitService.getDiff();
-                            diffViewer.setDiff(diff);
-
-                            reviewPanel.setReview("AI review not connected yet.");
-                            promptPanel.setPrompt("Next step: connect OpenAI API.");
-                        })
-                );
-
-                Platform.runLater(() -> statusBar.setStatus("Watching: " + PROJECT_PATH));
-                watcher.startWatching();
-
-            } catch (Exception e) {
-                Platform.runLater(() -> statusBar.setStatus("Watcher error: " + e.getMessage()));
-            }
-        });
-
-        watcherThread.setDaemon(true);
-        watcherThread.start();
+    private void chooseProject() {
+        new ProjectChooser().choose(stage).ifPresent(projectManager::open);
     }
 
-    public static void main(String[] args) {
-        launch(args);
+    private void subscribeToProjectEvents() {
+        projectManager.onProjectOpened(project -> runOnUiThread(() ->
+                stage.setTitle("AI Coding Companion - " + project.path().getFileName())));
+        projectManager.onProjectClosed(() -> runOnUiThread(() ->
+                stage.setTitle("AI Coding Companion")));
+        projectManager.onStatusChanged(status ->
+                runOnUiThread(() -> statusBar.setStatus(status)));
+        projectManager.onFileChanged(changedFile -> runOnUiThread(() -> {
+            sidebar.addChangedFile(changedFile);
+            diffViewer.setDiff(projectManager.getCurrentDiff());
+            reviewPanel.setReview("AI review not connected yet.");
+            promptPanel.setPrompt("Next step: connect OpenAI API.");
+        }));
+    }
+
+    private void runOnUiThread(Runnable action) {
+        if (Platform.isFxApplicationThread()) {
+            action.run();
+        } else {
+            Platform.runLater(action);
+        }
     }
 }
