@@ -228,10 +228,10 @@ public class MainWindow {
         }));
         projectManager.onProjectAnalyzed(analysis -> {
             memoryManager.recordAnalysis(analysis);
-                runOnUiThread(() -> {
-                    currentAnalysis = analysis;
-                    sidebar.setProjectAnalysis(analysis);
-                });
+            runOnUiThread(() -> {
+                currentAnalysis = analysis;
+                sidebar.setProjectAnalysis(analysis);
+            });
         });
         projectManager.onArchitectureAnalyzed(graph ->
                 runOnUiThread(() -> architecturePanel.setGraph(graph)));
@@ -249,8 +249,8 @@ public class MainWindow {
     }
 
     private void subscribeToAutomaticReviews() {
-        automaticReviewPipeline.onReview(response -> {
-            persistReview(response);
+        automaticReviewPipeline.onReview((response, diffSnapshot) -> {
+            persistReview(response, diffSnapshot);
             runOnUiThread(() -> {
                 displayReview(response);
                 reviewPanel.setStatus(responseFailed(response)
@@ -286,16 +286,20 @@ public class MainWindow {
         }
         String userPrompt = promptPanel.getPrompt();
         String providerName = aiService.getActiveProvider().getName();
+        String diffSnapshot = projectManager.getCurrentDiff();
+        diffViewer.setDiff(diffSnapshot);
         promptPanel.setReviewInProgress(true);
         reviewPanel.setStatus(ReviewPanel.ReviewStatus.REVIEWING);
-        statusBar.setStatus("Requesting review from " + providerName + "...");
+        statusBar.setStatus(diffSnapshot.isBlank()
+                ? "Git diff is empty."
+                : "Reviewing diff: " + diffSnapshot.length() + " characters");
         Thread requestThread = new Thread(() -> {
             AIResponse response;
             try {
                 AIRequest request = reviewPromptBuilder.build(currentAnalysis,
                         memoryManager.currentMemory(),
                         taskStore.openTaskPlan(),
-                        projectManager.getCurrentDiff(), userPrompt);
+                        diffSnapshot, userPrompt);
                 response = aiService.send(request);
             } catch (Exception e) {
                 response = new AIResponse("AI request failed: " + e.getMessage(),
@@ -303,7 +307,7 @@ public class MainWindow {
                         java.util.OptionalLong.empty());
             }
             AIResponse completed = response;
-            persistReview(completed);
+            persistReview(completed, diffSnapshot);
             runOnUiThread(() -> {
                 displayReview(completed);
                 reviewPanel.setStatus(responseFailed(completed)
@@ -330,12 +334,12 @@ public class MainWindow {
                 || text.contains("request was interrupted");
     }
 
-    private void persistReview(AIResponse response) {
+    private void persistReview(AIResponse response, String diffSnapshot) {
         ProjectAnalysis analysis = currentAnalysis;
         if (analysis == null) {
             return;
         }
-        String diff = projectManager.getCurrentDiff();
+        String diff = diffSnapshot == null ? "" : diffSnapshot;
         List<String> reviewedFiles;
         synchronized (changedFiles) {
             reviewedFiles = new ArrayList<>(changedFiles);

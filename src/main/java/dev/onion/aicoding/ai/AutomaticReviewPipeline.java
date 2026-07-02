@@ -14,6 +14,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import dev.onion.aicoding.settings.Settings;
@@ -37,7 +38,7 @@ public class AutomaticReviewPipeline implements AutoCloseable {
     private final AtomicLong generation = new AtomicLong();
     private volatile Future<?> pendingDebounce;
     private volatile Future<?> runningReview;
-    private Consumer<AIResponse> onReview = response -> { };
+    private BiConsumer<AIResponse, String> onReview = (response, diffSnapshot) -> { };
     private Consumer<String> onCodexPrompt = prompt -> { };
     private Consumer<String> onDiff = diff -> { };
     private Consumer<String> onStatusChanged = status -> { };
@@ -81,16 +82,20 @@ public class AutomaticReviewPipeline implements AutoCloseable {
             return;
         }
         ProjectMemory memory = memorySupplier.get();
-        String diff = diffSupplier.get();
+        TaskPlan taskPlan = taskSupplier.get();
+        String diffSnapshot = diffSupplier.get();
         if (version != generation.get()) {
             return;
         }
-        onDiff.accept(diff);
+        onDiff.accept(diffSnapshot);
+        onStatusChanged.accept(diffSnapshot.isBlank()
+                ? "Git diff is empty."
+                : "Reviewing diff: " + diffSnapshot.length() + " characters");
         String requestText = "Review the latest change to " + changedFile.getFileName() + ".";
         AIRequest reviewRequest = reviewPromptBuilder.build(
-                analysis, memory, taskSupplier.get(), diff, requestText);
+                analysis, memory, taskPlan, diffSnapshot, requestText);
         AIRequest codexRequest = codexPromptBuilder.build(
-                analysis, memory, taskSupplier.get(), diff,
+                analysis, memory, taskPlan, diffSnapshot,
                 "Implement fixes recommended for the latest project changes.");
         onCodexPrompt.accept(codexRequest.userPrompt());
         onStatusChanged.accept("Automatic review using "
@@ -106,7 +111,7 @@ public class AutomaticReviewPipeline implements AutoCloseable {
                         OptionalLong.empty());
             }
             if (version == generation.get() && !Thread.currentThread().isInterrupted()) {
-                onReview.accept(response);
+                onReview.accept(response, diffSnapshot);
                 onStatusChanged.accept("Automatic review complete: "
                         + response.providerName() + " | "
                         + response.elapsedTime().toMillis() + " ms");
@@ -114,7 +119,7 @@ public class AutomaticReviewPipeline implements AutoCloseable {
         });
     }
 
-    public void onReview(Consumer<AIResponse> callback) {
+    public void onReview(BiConsumer<AIResponse, String> callback) {
         onReview = callback;
     }
 
