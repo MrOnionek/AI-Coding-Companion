@@ -1,4 +1,9 @@
 package dev.onion.aicoding.model;
 
-public class ProjectInfo {
+public record ProjectInfo(
+        String name,
+        String absolutePath,
+        boolean gitRepository,
+        String buildSystem,
+        String language) {
 }

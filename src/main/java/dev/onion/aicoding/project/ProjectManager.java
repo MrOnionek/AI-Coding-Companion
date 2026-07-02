@@ -23,6 +23,7 @@ public class ProjectManager {
     private Runnable onProjectClosed = () -> { };
     private Consumer<Path> onFileChanged = path -> { };
     private Consumer<String> onStatusChanged = status -> { };
+    private Consumer<ProjectAnalysis> onProjectAnalyzed = analysis -> { };
 
     public ProjectManager(Settings settings, SettingsManager settingsManager) {
         this.settings = settings;
@@ -51,6 +52,7 @@ public class ProjectManager {
         onStatusChanged.accept("Project opened: " + projectPath + " | "
                 + gitStatus(currentProject));
         startWatcher();
+        startIndexing(currentProject);
         return Optional.of(currentProject);
     }
 
@@ -130,6 +132,23 @@ public class ProjectManager {
         return project.gitRepository() ? "Git repo detected" : "Git repo missing";
     }
 
+    private void startIndexing(Project project) {
+        Thread indexerThread = new Thread(() -> {
+            try {
+                ProjectAnalysis analysis = new ProjectAnalyzer().analyze(project);
+                if (project == currentProject) {
+                    onProjectAnalyzed.accept(analysis);
+                }
+            } catch (IOException e) {
+                if (project == currentProject) {
+                    onStatusChanged.accept("Indexing error: " + e.getMessage());
+                }
+            }
+        }, "project-indexer");
+        indexerThread.setDaemon(true);
+        indexerThread.start();
+    }
+
     public void onProjectOpened(Consumer<Project> callback) {
         onProjectOpened = callback;
     }
@@ -144,5 +163,9 @@ public class ProjectManager {
 
     public void onStatusChanged(Consumer<String> callback) {
         onStatusChanged = callback;
+    }
+
+    public void onProjectAnalyzed(Consumer<ProjectAnalysis> callback) {
+        onProjectAnalyzed = callback;
     }
 }

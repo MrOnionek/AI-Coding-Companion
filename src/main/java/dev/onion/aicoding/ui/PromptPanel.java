@@ -12,6 +12,7 @@ import javafx.scene.layout.VBox;
 public class PromptPanel extends VBox {
 
     private final TextArea promptArea;
+    private final Button reviewButton;
 
     public PromptPanel() {
         setSpacing(8);
@@ -27,8 +28,9 @@ public class PromptPanel extends VBox {
 
         Button copyButton = new Button("Copy Prompt");
         copyButton.setOnAction(event -> copyPrompt());
+        reviewButton = new Button("Request AI Review");
 
-        HBox buttons = new HBox(8, copyButton);
+        HBox buttons = new HBox(8, copyButton, reviewButton);
 
         getChildren().addAll(title, promptArea, buttons);
         VBox.setVgrow(promptArea, Priority.ALWAYS);
@@ -36,6 +38,19 @@ public class PromptPanel extends VBox {
 
     public void setPrompt(String prompt) {
         promptArea.setText(prompt);
+    }
+
+    public String getPrompt() {
+        return promptArea.getText();
+    }
+
+    public void setOnReview(Runnable action) {
+        reviewButton.setOnAction(event -> action.run());
+    }
+
+    public void setReviewInProgress(boolean inProgress) {
+        reviewButton.setDisable(inProgress);
+        reviewButton.setText(inProgress ? "Reviewing..." : "Request AI Review");
     }
 
     private void copyPrompt() {

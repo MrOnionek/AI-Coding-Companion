@@ -1,5 +1,6 @@
 package dev.onion.aicoding.app;
 
+import dev.onion.aicoding.ai.AIService;
 import dev.onion.aicoding.settings.Settings;
 import dev.onion.aicoding.settings.SettingsManager;
 import dev.onion.aicoding.project.ProjectManager;
@@ -9,11 +10,13 @@ public class AppContext {
     private final SettingsManager settingsManager;
     private final Settings settings;
     private final ProjectManager projectManager;
+    private final AIService aiService;
 
     public AppContext() {
         this.settingsManager = new SettingsManager();
         this.settings = settingsManager.load();
         this.projectManager = new ProjectManager(settings, settingsManager);
+        this.aiService = new AIService();
     }
 
     public SettingsManager settingsManager() {
@@ -26,5 +29,9 @@ public class AppContext {
 
     public ProjectManager projectManager() {
         return projectManager;
+    }
+
+    public AIService aiService() {
+        return aiService;
     }
 }
