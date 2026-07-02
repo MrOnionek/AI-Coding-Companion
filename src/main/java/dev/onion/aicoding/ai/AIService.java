@@ -6,16 +6,19 @@ import dev.onion.aicoding.providers.GeminiProvider;
 import dev.onion.aicoding.providers.OllamaProvider;
 import java.util.List;
 import java.util.Optional;
+import dev.onion.aicoding.settings.Settings;
 
 public class AIService {
 
     private final List<AIProvider> providers;
     private AIProvider activeProvider;
 
-    public AIService() {
-        providers = List.of(new ChatGPTProvider(), new ClaudeProvider(),
+    public AIService(Settings settings) {
+        providers = List.of(new ChatGPTProvider(settings::resolveOpenAIApiKey,
+                settings::getReviewTimeoutSeconds), new ClaudeProvider(),
                 new GeminiProvider(), new OllamaProvider());
         activeProvider = providers.getFirst();
+        setActiveProvider(settings.getDefaultAIProvider());
     }
 
     public List<AIProvider> getProviders() {

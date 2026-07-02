@@ -16,6 +16,8 @@ import dev.onion.aicoding.review.ReviewDatabase;
 import dev.onion.aicoding.review.ReviewRecord;
 import dev.onion.aicoding.task.TaskPlanner;
 import dev.onion.aicoding.task.TaskStore;
+import dev.onion.aicoding.settings.Settings;
+import dev.onion.aicoding.settings.SettingsManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -49,6 +51,8 @@ public class MainWindow {
     private ArchitecturePanel architecturePanel;
     private TaskPanel taskPanel;
     private Stage stage;
+    private BorderPane outer;
+    private Toolbar toolbar;
     private final ProjectManager projectManager;
     private final AIService aiService;
     private final PromptBuilder reviewPromptBuilder;
@@ -56,6 +60,8 @@ public class MainWindow {
     private final ReviewDatabase reviewDatabase;
     private final TaskStore taskStore;
     private final TaskPlanner taskPlanner = new TaskPlanner();
+    private final Settings settings;
+    private final SettingsManager settingsManager;
     private final Set<String> changedFiles = new LinkedHashSet<>();
     private final AtomicBoolean manualReviewRunning = new AtomicBoolean();
     private volatile String latestCodexPrompt = "";
@@ -64,13 +70,15 @@ public class MainWindow {
 
     public MainWindow(AppContext context) {
         this.projectManager = context.projectManager();
+        this.settings = context.settings();
+        this.settingsManager = context.settingsManager();
         this.aiService = context.aiService();
         this.reviewPromptBuilder = new ReviewPromptBuilder();
         this.memoryManager = context.memoryManager();
         this.reviewDatabase = context.reviewDatabase();
         this.taskStore = context.taskStore();
         this.automaticReviewPipeline = new AutomaticReviewPipeline(
-                aiService, () -> currentAnalysis, memoryManager::currentMemory,
+                aiService, settings, () -> currentAnalysis, memoryManager::currentMemory,
                 taskStore::openTaskPlan,
                 projectManager::getCurrentDiff);
     }
@@ -113,14 +121,17 @@ public class MainWindow {
         root.setDividerPositions(0.76);
         root.setStyle("-fx-background-color: #181818;");
 
-        BorderPane outer = new BorderPane();
-        outer.setTop(new Toolbar(this::chooseProject,
+        outer = new BorderPane();
+        toolbar = new Toolbar(this::chooseProject,
                 providerNames,
-                aiService.getActiveProvider().getName(), this::selectProvider));
+                aiService.getActiveProvider().getName(), this::selectProvider,
+                () -> openSettings(providerNames));
+        outer.setTop(toolbar);
         outer.setCenter(root);
         outer.setBottom(statusBar);
 
         Scene scene = new Scene(outer, 1300, 800);
+        applyVisualSettings();
 
         stage.setTitle("AI Coding Companion");
         stage.setScene(scene);
@@ -143,8 +154,32 @@ public class MainWindow {
 
     private void selectProvider(String providerName) {
         if (aiService.setActiveProvider(providerName)) {
+            settings.setDefaultAIProvider(providerName);
+            settingsManager.save(settings);
             statusBar.setStatus("AI provider selected: " + providerName);
         }
+    }
+
+    private void openSettings(List<String> providerNames) {
+        new SettingsWindow(settings, settingsManager, providerNames, () -> {
+            aiService.setActiveProvider(settings.getDefaultAIProvider());
+            toolbar.setSelectedProvider(aiService.getActiveProvider().getName());
+            automaticReviewPipeline.settingsChanged();
+            applyVisualSettings();
+            statusBar.setStatus("Settings saved");
+        }).show(stage);
+    }
+
+    private void applyVisualSettings() {
+        String themeStyle = switch (settings.getTheme()) {
+            case DARK -> "-fx-base: #202020; -fx-control-inner-background: #181818; "
+                    + "-fx-text-base-color: white;";
+            case LIGHT -> "-fx-base: #f2f2f2; -fx-control-inner-background: white; "
+                    + "-fx-text-base-color: black;";
+            case SYSTEM -> "";
+        };
+        outer.setStyle("-fx-font-size: " + settings.getUiFontSize() + "px; "
+                + themeStyle);
     }
 
     private void subscribeToProjectEvents() {

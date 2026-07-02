@@ -23,6 +23,23 @@ public class SettingsManager {
         try (InputStream input = Files.newInputStream(settingsFile)) {
             properties.load(input);
             settings.setLastProjectPath(properties.getProperty("lastProjectPath", ""));
+            settings.setOpenAIApiKeyOverride(
+                    properties.getProperty("openAIApiKeyOverride", ""));
+            settings.setDefaultAIProvider(
+                    properties.getProperty("defaultAIProvider", "ChatGPT"));
+            settings.setAutomaticReviewsEnabled(Boolean.parseBoolean(
+                    properties.getProperty("automaticReviewsEnabled", "true")));
+            settings.setReviewDebounceMillis(longValue(properties,
+                    "reviewDebounceMillis", 1500));
+            settings.setReviewTimeoutSeconds((int) longValue(properties,
+                    "reviewTimeoutSeconds", 120));
+            settings.setUiFontSize((int) longValue(properties, "uiFontSize", 13));
+            try {
+                settings.setTheme(Settings.Theme.valueOf(
+                        properties.getProperty("theme", "SYSTEM")));
+            } catch (IllegalArgumentException ignored) {
+                settings.setTheme(Settings.Theme.SYSTEM);
+            }
             String recent = properties.getProperty("recentProjects", "");
             if (!recent.isBlank()) {
                 for (String path : recent.split(RECENT_SEPARATOR)) {
@@ -40,6 +57,18 @@ public class SettingsManager {
     public void save(Settings settings) {
         Properties properties = new Properties();
         properties.setProperty("lastProjectPath", settings.getLastProjectPath());
+        properties.setProperty("openAIApiKeyOverride",
+                settings.getOpenAIApiKeyOverride());
+        properties.setProperty("defaultAIProvider", settings.getDefaultAIProvider());
+        properties.setProperty("automaticReviewsEnabled",
+                Boolean.toString(settings.isAutomaticReviewsEnabled()));
+        properties.setProperty("reviewDebounceMillis",
+                Long.toString(settings.getReviewDebounceMillis()));
+        properties.setProperty("reviewTimeoutSeconds",
+                Integer.toString(settings.getReviewTimeoutSeconds()));
+        properties.setProperty("uiFontSize",
+                Integer.toString(settings.getUiFontSize()));
+        properties.setProperty("theme", settings.getTheme().name());
         properties.setProperty("recentProjects", settings.getRecentProjects().stream()
                 .map(RecentProject::path)
                 .reduce((left, right) -> left + RECENT_SEPARATOR + right)
@@ -51,6 +80,14 @@ public class SettingsManager {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Could not save settings", e);
+        }
+    }
+
+    private long longValue(Properties properties, String key, long fallback) {
+        try {
+            return Long.parseLong(properties.getProperty(key, Long.toString(fallback)));
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 }

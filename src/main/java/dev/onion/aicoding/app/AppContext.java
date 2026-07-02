@@ -22,7 +22,7 @@ public class AppContext {
         this.settingsManager = new SettingsManager();
         this.settings = settingsManager.load();
         this.projectManager = new ProjectManager(settings, settingsManager);
-        this.aiService = new AIService();
+        this.aiService = new AIService(settings);
         this.memoryManager = new MemoryManager();
         this.reviewDatabase = new ReviewDatabase();
         this.taskStore = new TaskStore();

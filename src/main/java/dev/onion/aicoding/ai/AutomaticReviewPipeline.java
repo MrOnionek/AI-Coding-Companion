@@ -16,10 +16,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import dev.onion.aicoding.settings.Settings;
 
 public class AutomaticReviewPipeline implements AutoCloseable {
 
-    private static final long DEBOUNCE_MILLIS = 1500;
+    private final Settings settings;
     private final AIService aiService;
     private final Supplier<ProjectAnalysis> analysisSupplier;
     private final Supplier<ProjectMemory> memorySupplier;
@@ -43,11 +44,13 @@ public class AutomaticReviewPipeline implements AutoCloseable {
 
     public AutomaticReviewPipeline(
             AIService aiService,
+            Settings settings,
             Supplier<ProjectAnalysis> analysisSupplier,
             Supplier<ProjectMemory> memorySupplier,
             Supplier<TaskPlan> taskSupplier,
             Supplier<String> diffSupplier) {
         this.aiService = aiService;
+        this.settings = settings;
         this.analysisSupplier = analysisSupplier;
         this.memorySupplier = memorySupplier;
         this.taskSupplier = taskSupplier;
@@ -58,14 +61,21 @@ public class AutomaticReviewPipeline implements AutoCloseable {
         long version = generation.incrementAndGet();
         cancel(pendingDebounce);
         cancel(runningReview);
+        if (!settings.isAutomaticReviewsEnabled()) {
+            onStatusChanged.accept("Automatic reviews disabled");
+            return;
+        }
         onStatusChanged.accept("Change detected: " + changedFile.getFileName()
                 + " | review pending");
         pendingDebounce = scheduler.schedule(
                 () -> startReview(version, changedFile),
-                DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
+                settings.getReviewDebounceMillis(), TimeUnit.MILLISECONDS);
     }
 
     private void startReview(long version, Path changedFile) {
+        if (!settings.isAutomaticReviewsEnabled()) {
+            return;
+        }
         ProjectAnalysis analysis = analysisSupplier.get();
         if (analysis == null || version != generation.get()) {
             return;
@@ -118,6 +128,15 @@ public class AutomaticReviewPipeline implements AutoCloseable {
 
     public void onDiff(Consumer<String> callback) {
         onDiff = callback;
+    }
+
+    public synchronized void settingsChanged() {
+        if (!settings.isAutomaticReviewsEnabled()) {
+            generation.incrementAndGet();
+            cancel(pendingDebounce);
+            cancel(runningReview);
+            onStatusChanged.accept("Automatic reviews disabled");
+        }
     }
 
     @Override

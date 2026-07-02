@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.OptionalLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 
 public class ChatGPTProvider implements AIProvider {
     private static final URI RESPONSES_API =
@@ -21,10 +23,18 @@ public class ChatGPTProvider implements AIProvider {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
             .build();
+    private final Supplier<String> apiKeySupplier;
+    private final IntSupplier timeoutSecondsSupplier;
+
+    public ChatGPTProvider(Supplier<String> apiKeySupplier,
+                           IntSupplier timeoutSecondsSupplier) {
+        this.apiKeySupplier = apiKeySupplier;
+        this.timeoutSecondsSupplier = timeoutSecondsSupplier;
+    }
 
     public String getName() { return "ChatGPT"; }
     public boolean isAvailable() {
-        String key = System.getenv("OPENAI_API_KEY");
+        String key = apiKeySupplier.get();
         return key != null && !key.isBlank();
     }
 
@@ -40,8 +50,8 @@ public class ChatGPTProvider implements AIProvider {
                     """.formatted(escapeJson(request.systemPrompt()),
                     escapeJson(request.userPrompt()));
             HttpRequest httpRequest = HttpRequest.newBuilder(RESPONSES_API)
-                    .timeout(Duration.ofMinutes(2))
-                    .header("Authorization", "Bearer " + System.getenv("OPENAI_API_KEY"))
+                    .timeout(Duration.ofSeconds(timeoutSecondsSupplier.getAsInt()))
+                    .header("Authorization", "Bearer " + apiKeySupplier.get())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
