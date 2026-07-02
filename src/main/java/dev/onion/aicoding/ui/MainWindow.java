@@ -11,6 +11,7 @@ import dev.onion.aicoding.project.ProjectManager;
 import dev.onion.aicoding.prompt.PromptBuilder;
 import dev.onion.aicoding.prompt.ReviewPromptBuilder;
 import dev.onion.aicoding.memory.MemoryManager;
+import dev.onion.aicoding.memory.MemoryEntry;
 import dev.onion.aicoding.review.ReviewDatabase;
 import dev.onion.aicoding.review.ReviewRecord;
 import dev.onion.aicoding.task.TaskPlanner;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javafx.application.Platform;
 import javafx.geometry.Orientation;
 import javafx.scene.Scene;
@@ -55,6 +57,7 @@ public class MainWindow {
     private final TaskStore taskStore;
     private final TaskPlanner taskPlanner = new TaskPlanner();
     private final Set<String> changedFiles = new LinkedHashSet<>();
+    private final AtomicBoolean manualReviewRunning = new AtomicBoolean();
     private volatile String latestCodexPrompt = "";
     private volatile ProjectAnalysis currentAnalysis;
     private final AutomaticReviewPipeline automaticReviewPipeline;
@@ -77,6 +80,10 @@ public class MainWindow {
         sidebar = new Sidebar();
         diffViewer = new DiffViewer();
         reviewPanel = new ReviewPanel();
+        reviewPanel.setOnSaveToMemory(review -> {
+            memoryManager.record(MemoryEntry.Type.REVIEW_NOTE, review);
+            statusBar.setStatus("Review saved to project memory");
+        });
         promptPanel = new PromptPanel();
         statusBar = new StatusBar();
         memoryPanel = new MemoryPanel();
@@ -181,6 +188,7 @@ public class MainWindow {
             synchronized (changedFiles) {
                 changedFiles.add(changedFile.toString());
             }
+            reviewPanel.setStatus(ReviewPanel.ReviewStatus.WAITING);
             automaticReviewPipeline.fileChanged(changedFile);
         }));
     }
@@ -188,26 +196,43 @@ public class MainWindow {
     private void subscribeToAutomaticReviews() {
         automaticReviewPipeline.onReview(response -> {
             persistReview(response);
-            runOnUiThread(() -> displayReview(response));
+            runOnUiThread(() -> {
+                displayReview(response);
+                reviewPanel.setStatus(responseFailed(response)
+                        ? ReviewPanel.ReviewStatus.FAILED
+                        : ReviewPanel.ReviewStatus.COMPLETE);
+            });
         });
         automaticReviewPipeline.onCodexPrompt(prompt -> {
             latestCodexPrompt = prompt;
-            runOnUiThread(() -> promptPanel.setPrompt(prompt));
+            runOnUiThread(() -> {
+                promptPanel.setPrompt(prompt);
+                reviewPanel.setSuggestedPrompt(prompt);
+            });
         });
         automaticReviewPipeline.onDiff(diff -> runOnUiThread(() ->
                 diffViewer.setDiff(diff)));
-        automaticReviewPipeline.onStatusChanged(status -> runOnUiThread(() ->
-                statusBar.setStatus(status)));
+        automaticReviewPipeline.onStatusChanged(status -> runOnUiThread(() -> {
+            statusBar.setStatus(status);
+            if (status.startsWith("Automatic review using")) {
+                reviewPanel.setStatus(ReviewPanel.ReviewStatus.REVIEWING);
+            }
+        }));
     }
 
     private void requestReview() {
         if (currentAnalysis == null) {
             reviewPanel.setReview("Open and index a project before requesting a review.");
+            reviewPanel.setStatus(ReviewPanel.ReviewStatus.FAILED);
+            return;
+        }
+        if (!manualReviewRunning.compareAndSet(false, true)) {
             return;
         }
         String userPrompt = promptPanel.getPrompt();
         String providerName = aiService.getActiveProvider().getName();
         promptPanel.setReviewInProgress(true);
+        reviewPanel.setStatus(ReviewPanel.ReviewStatus.REVIEWING);
         statusBar.setStatus("Requesting review from " + providerName + "...");
         Thread requestThread = new Thread(() -> {
             AIResponse response;
@@ -226,9 +251,13 @@ public class MainWindow {
             persistReview(completed);
             runOnUiThread(() -> {
                 displayReview(completed);
+                reviewPanel.setStatus(responseFailed(completed)
+                        ? ReviewPanel.ReviewStatus.FAILED
+                        : ReviewPanel.ReviewStatus.COMPLETE);
                 statusBar.setStatus("Provider: " + completed.providerName()
                         + " | Elapsed: " + completed.elapsedTime().toMillis() + " ms");
                 promptPanel.setReviewInProgress(false);
+                manualReviewRunning.set(false);
             });
         }, "ai-review-request");
         requestThread.setDaemon(true);
@@ -236,9 +265,14 @@ public class MainWindow {
     }
 
     private void displayReview(AIResponse response) {
-        reviewPanel.setReview("Provider: " + response.providerName()
-                + "\nElapsed: " + response.elapsedTime().toMillis() + " ms\n\n"
-                + response.responseText());
+        reviewPanel.setMetadata(response.providerName(), response.elapsedTime().toMillis());
+        reviewPanel.setReview(response.responseText());
+    }
+
+    private boolean responseFailed(AIResponse response) {
+        String text = response.responseText().toLowerCase(java.util.Locale.ROOT);
+        return text.contains("request failed") || text.contains("review failed")
+                || text.contains("request was interrupted");
     }
 
     private void persistReview(AIResponse response) {
@@ -263,9 +297,10 @@ public class MainWindow {
     }
 
     private void restoreReview(ReviewRecord review) {
-        reviewPanel.setReview("Provider: " + review.provider()
-                + "\nElapsed: " + review.elapsedTimeMillis() + " ms\n\n"
-                + review.reviewText());
+        reviewPanel.setMetadata(review.provider(), review.elapsedTimeMillis());
+        reviewPanel.setReview(review.reviewText());
+        reviewPanel.setStatus(ReviewPanel.ReviewStatus.COMPLETE);
+        reviewPanel.setSuggestedPrompt(review.suggestedCodexPrompt());
         promptPanel.setPrompt(review.suggestedCodexPrompt());
         statusBar.setStatus("Restored review from " + review.timestamp());
     }

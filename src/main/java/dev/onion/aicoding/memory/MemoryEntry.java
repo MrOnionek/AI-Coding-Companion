@@ -9,7 +9,8 @@ public record MemoryEntry(Type type, String content, Instant createdAt) {
         COMPLETED_MILESTONE,
         KNOWN_BUG,
         TODO,
-        CODING_CONVENTION
+        CODING_CONVENTION,
+        REVIEW_NOTE
     }
 
     public MemoryEntry {
