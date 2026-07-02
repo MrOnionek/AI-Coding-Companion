@@ -3,6 +3,7 @@ package dev.onion.aicoding.prompt;
 import dev.onion.aicoding.ai.AIRequest;
 import dev.onion.aicoding.project.ProjectAnalysis;
 import dev.onion.aicoding.memory.ProjectMemory;
+import dev.onion.aicoding.task.TaskPlan;
 
 public class CodexPromptBuilder implements PromptBuilder {
 
@@ -17,11 +18,11 @@ public class CodexPromptBuilder implements PromptBuilder {
     }
 
     @Override
-    public AIRequest build(ProjectAnalysis analysis, ProjectMemory memory,
+    public AIRequest build(ProjectAnalysis analysis, ProjectMemory memory, TaskPlan tasks,
                            String gitDiff, String userPrompt) {
         String projectSummary = ReviewPromptBuilder.formatAnalysis(analysis);
         String fullPrompt = PromptTemplates.IMPLEMENTATION_REQUEST.formatted(
-                projectSummary, memory.toPromptText(),
+                projectSummary, memory.toPromptText(), tasks.toPromptText(),
                 gitDiff == null || gitDiff.isBlank() ? "(no changes)" : gitDiff,
                 userPrompt == null || userPrompt.isBlank()
                         ? "Suggest the next implementation step." : userPrompt);

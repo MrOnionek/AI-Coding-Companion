@@ -22,6 +22,9 @@ public final class PromptTemplates {
             Project Memory:
             %s
 
+            Open Tasks:
+            %s
+
             Git Diff:
             %s
 
@@ -36,6 +39,9 @@ public final class PromptTemplates {
             %s
 
             Project Memory:
+            %s
+
+            Open Tasks:
             %s
 
             Current Git Diff:

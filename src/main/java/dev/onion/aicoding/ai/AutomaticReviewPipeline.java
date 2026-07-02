@@ -4,6 +4,7 @@ import dev.onion.aicoding.memory.ProjectMemory;
 import dev.onion.aicoding.project.ProjectAnalysis;
 import dev.onion.aicoding.prompt.CodexPromptBuilder;
 import dev.onion.aicoding.prompt.ReviewPromptBuilder;
+import dev.onion.aicoding.task.TaskPlan;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.OptionalLong;
@@ -23,6 +24,7 @@ public class AutomaticReviewPipeline implements AutoCloseable {
     private final Supplier<ProjectAnalysis> analysisSupplier;
     private final Supplier<ProjectMemory> memorySupplier;
     private final Supplier<String> diffSupplier;
+    private final Supplier<TaskPlan> taskSupplier;
     private final ReviewPromptBuilder reviewPromptBuilder = new ReviewPromptBuilder();
     private final CodexPromptBuilder codexPromptBuilder = new CodexPromptBuilder();
     private final ScheduledExecutorService scheduler =
@@ -43,10 +45,12 @@ public class AutomaticReviewPipeline implements AutoCloseable {
             AIService aiService,
             Supplier<ProjectAnalysis> analysisSupplier,
             Supplier<ProjectMemory> memorySupplier,
+            Supplier<TaskPlan> taskSupplier,
             Supplier<String> diffSupplier) {
         this.aiService = aiService;
         this.analysisSupplier = analysisSupplier;
         this.memorySupplier = memorySupplier;
+        this.taskSupplier = taskSupplier;
         this.diffSupplier = diffSupplier;
     }
 
@@ -74,9 +78,9 @@ public class AutomaticReviewPipeline implements AutoCloseable {
         onDiff.accept(diff);
         String requestText = "Review the latest change to " + changedFile.getFileName() + ".";
         AIRequest reviewRequest = reviewPromptBuilder.build(
-                analysis, memory, diff, requestText);
+                analysis, memory, taskSupplier.get(), diff, requestText);
         AIRequest codexRequest = codexPromptBuilder.build(
-                analysis, memory, diff,
+                analysis, memory, taskSupplier.get(), diff,
                 "Implement fixes recommended for the latest project changes.");
         onCodexPrompt.accept(codexRequest.userPrompt());
         onStatusChanged.accept("Automatic review using "

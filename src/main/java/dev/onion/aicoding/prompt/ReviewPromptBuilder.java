@@ -3,6 +3,7 @@ package dev.onion.aicoding.prompt;
 import dev.onion.aicoding.ai.AIRequest;
 import dev.onion.aicoding.project.ProjectAnalysis;
 import dev.onion.aicoding.memory.ProjectMemory;
+import dev.onion.aicoding.task.TaskPlan;
 
 public class ReviewPromptBuilder implements PromptBuilder {
 
@@ -17,11 +18,11 @@ public class ReviewPromptBuilder implements PromptBuilder {
     }
 
     @Override
-    public AIRequest build(ProjectAnalysis analysis, ProjectMemory memory,
+    public AIRequest build(ProjectAnalysis analysis, ProjectMemory memory, TaskPlan tasks,
                            String gitDiff, String userPrompt) {
         String projectSummary = formatAnalysis(analysis);
         String fullPrompt = PromptTemplates.REVIEW_REQUEST.formatted(
-                projectSummary, memory.toPromptText(),
+                projectSummary, memory.toPromptText(), tasks.toPromptText(),
                 valueOrPlaceholder(gitDiff, "(no changes)"),
                 valueOrPlaceholder(userPrompt, "Provide a general code review."));
         return new AIRequest(systemPromptBuilder.buildReviewSystemPrompt(),

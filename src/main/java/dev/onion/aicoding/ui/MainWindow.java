@@ -13,6 +13,8 @@ import dev.onion.aicoding.prompt.ReviewPromptBuilder;
 import dev.onion.aicoding.memory.MemoryManager;
 import dev.onion.aicoding.review.ReviewDatabase;
 import dev.onion.aicoding.review.ReviewRecord;
+import dev.onion.aicoding.task.TaskPlanner;
+import dev.onion.aicoding.task.TaskStore;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -41,12 +43,15 @@ public class MainWindow {
     private MemoryPanel memoryPanel;
     private ReviewHistoryPanel reviewHistoryPanel;
     private ArchitecturePanel architecturePanel;
+    private TaskPanel taskPanel;
     private Stage stage;
     private final ProjectManager projectManager;
     private final AIService aiService;
     private final PromptBuilder reviewPromptBuilder;
     private final MemoryManager memoryManager;
     private final ReviewDatabase reviewDatabase;
+    private final TaskStore taskStore;
+    private final TaskPlanner taskPlanner = new TaskPlanner();
     private final Set<String> changedFiles = new LinkedHashSet<>();
     private volatile String latestCodexPrompt = "";
     private volatile ProjectAnalysis currentAnalysis;
@@ -58,8 +63,10 @@ public class MainWindow {
         this.reviewPromptBuilder = new ReviewPromptBuilder();
         this.memoryManager = context.memoryManager();
         this.reviewDatabase = context.reviewDatabase();
+        this.taskStore = context.taskStore();
         this.automaticReviewPipeline = new AutomaticReviewPipeline(
                 aiService, () -> currentAnalysis, memoryManager::currentMemory,
+                taskStore::openTaskPlan,
                 projectManager::getCurrentDiff);
     }
 
@@ -75,6 +82,8 @@ public class MainWindow {
                 .map(AIProvider::getName).toList();
         reviewHistoryPanel = new ReviewHistoryPanel(providerNames);
         architecturePanel = new ArchitecturePanel();
+        taskPanel = new TaskPanel();
+        taskPanel.setOnStatusChanged(taskStore::updateStatus);
         reviewHistoryPanel.setSearch(reviewDatabase::search);
         reviewHistoryPanel.setOnReviewSelected(this::restoreReview);
         promptPanel.setOnReview(this::requestReview);
@@ -85,11 +94,12 @@ public class MainWindow {
         root.setLeft(sidebar);
         root.setCenter(diffViewer);
         VBox rightPanels = new VBox(
-                reviewPanel, memoryPanel, reviewHistoryPanel, architecturePanel);
+                reviewPanel, memoryPanel, reviewHistoryPanel, architecturePanel, taskPanel);
         VBox.setVgrow(reviewPanel, Priority.ALWAYS);
         VBox.setVgrow(memoryPanel, Priority.ALWAYS);
         VBox.setVgrow(reviewHistoryPanel, Priority.ALWAYS);
         VBox.setVgrow(architecturePanel, Priority.ALWAYS);
+        VBox.setVgrow(taskPanel, Priority.ALWAYS);
         root.setRight(rightPanels);
         root.setBottom(promptPanel);
 
@@ -126,9 +136,12 @@ public class MainWindow {
                 runOnUiThread(() -> memoryPanel.setMemory(memory)));
         reviewDatabase.onHistoryChanged(history ->
                 runOnUiThread(() -> reviewHistoryPanel.setHistory(history)));
+        taskStore.onTasksChanged(tasks ->
+                runOnUiThread(() -> taskPanel.setTasks(tasks)));
         projectManager.onProjectOpened(project -> {
             memoryManager.openProject(project.path());
             reviewDatabase.openProject(project.path());
+            taskStore.openProject(project.path());
             synchronized (changedFiles) {
                 changedFiles.clear();
             }
@@ -192,6 +205,7 @@ public class MainWindow {
             try {
                 AIRequest request = reviewPromptBuilder.build(currentAnalysis,
                         memoryManager.currentMemory(),
+                        taskStore.openTaskPlan(),
                         projectManager.getCurrentDiff(), userPrompt);
                 response = aiService.send(request);
             } catch (Exception e) {
@@ -236,6 +250,7 @@ public class MainWindow {
                 response.elapsedTime().toMillis(), response.tokenUsage(),
                 response.responseText(), latestCodexPrompt);
         reviewDatabase.save(record);
+        taskStore.save(taskPlanner.createPlan(record));
     }
 
     private void restoreReview(ReviewRecord review) {
