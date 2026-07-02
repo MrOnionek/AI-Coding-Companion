@@ -27,10 +27,12 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import javafx.application.Platform;
+import javafx.geometry.Orientation;
 import javafx.scene.Scene;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 public class MainWindow {
@@ -88,20 +90,21 @@ public class MainWindow {
         reviewHistoryPanel.setOnReviewSelected(this::restoreReview);
         promptPanel.setOnReview(this::requestReview);
 
-        BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #181818;");
+        TabPane detailsTabs = new TabPane(
+                tab("Review", reviewPanel),
+                tab("Memory", memoryPanel),
+                tab("History", reviewHistoryPanel),
+                tab("Architecture", architecturePanel),
+                tab("Tasks", taskPanel));
+        detailsTabs.setMinWidth(300);
 
-        root.setLeft(sidebar);
-        root.setCenter(diffViewer);
-        VBox rightPanels = new VBox(
-                reviewPanel, memoryPanel, reviewHistoryPanel, architecturePanel, taskPanel);
-        VBox.setVgrow(reviewPanel, Priority.ALWAYS);
-        VBox.setVgrow(memoryPanel, Priority.ALWAYS);
-        VBox.setVgrow(reviewHistoryPanel, Priority.ALWAYS);
-        VBox.setVgrow(architecturePanel, Priority.ALWAYS);
-        VBox.setVgrow(taskPanel, Priority.ALWAYS);
-        root.setRight(rightPanels);
-        root.setBottom(promptPanel);
+        SplitPane workspace = new SplitPane(sidebar, diffViewer, detailsTabs);
+        workspace.setDividerPositions(0.22, 0.70);
+
+        SplitPane root = new SplitPane(workspace, promptPanel);
+        root.setOrientation(Orientation.VERTICAL);
+        root.setDividerPositions(0.76);
+        root.setStyle("-fx-background-color: #181818;");
 
         BorderPane outer = new BorderPane();
         outer.setTop(new Toolbar(this::chooseProject,
@@ -119,6 +122,12 @@ public class MainWindow {
         subscribeToProjectEvents();
         subscribeToAutomaticReviews();
         projectManager.reopenLastProject();
+    }
+
+    private Tab tab(String title, javafx.scene.Node content) {
+        Tab tab = new Tab(title, content);
+        tab.setClosable(false);
+        return tab;
     }
 
     private void chooseProject() {
