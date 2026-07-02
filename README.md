@@ -46,3 +46,49 @@ AI Coding Companion is a desktop application that automatically reviews your cod
 
 \- OpenAI Responses API
 
+
+
+\## Screenshot
+
+
+
+!\[Main Window](docs/main-window.png)
+
+
+
+\## Roadmap
+
+
+
+\- \[x] Git Integration
+
+\- \[x] Project Analyzer
+
+\- \[x] Architecture Explorer
+
+\- \[x] Prompt Engine
+
+\- \[x] Persistent Memory
+
+\- \[x] Review History
+
+\- \[x] Task Planner
+
+\- \[x] Automatic Reviews
+
+\- \[ ] Markdown Rendering
+
+\- \[ ] Rich Diff Viewer
+
+\- \[ ] Ollama Integration
+
+\- \[ ] Multi-Agent Reviews
+
+
+
+\## License
+
+
+
+MIT
+
