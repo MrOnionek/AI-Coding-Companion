@@ -5,6 +5,7 @@ import dev.onion.aicoding.ai.AIProvider;
 import dev.onion.aicoding.ai.AIService;
 import dev.onion.aicoding.ai.AIRequest;
 import dev.onion.aicoding.ai.AIResponse;
+import dev.onion.aicoding.ai.AutomaticReviewPipeline;
 import dev.onion.aicoding.project.ProjectAnalysis;
 import dev.onion.aicoding.project.ProjectManager;
 import dev.onion.aicoding.prompt.PromptBuilder;
@@ -31,12 +32,16 @@ public class MainWindow {
     private final PromptBuilder reviewPromptBuilder;
     private final MemoryManager memoryManager;
     private volatile ProjectAnalysis currentAnalysis;
+    private final AutomaticReviewPipeline automaticReviewPipeline;
 
     public MainWindow(AppContext context) {
         this.projectManager = context.projectManager();
         this.aiService = context.aiService();
         this.reviewPromptBuilder = new ReviewPromptBuilder();
         this.memoryManager = context.memoryManager();
+        this.automaticReviewPipeline = new AutomaticReviewPipeline(
+                aiService, () -> currentAnalysis, memoryManager::currentMemory,
+                projectManager::getCurrentDiff);
     }
 
     public void show(Stage stage) {
@@ -74,6 +79,7 @@ public class MainWindow {
         stage.show();
 
         subscribeToProjectEvents();
+        subscribeToAutomaticReviews();
         projectManager.reopenLastProject();
     }
 
@@ -113,10 +119,19 @@ public class MainWindow {
                 runOnUiThread(() -> statusBar.setStatus(status)));
         projectManager.onFileChanged(changedFile -> runOnUiThread(() -> {
             sidebar.addChangedFile(changedFile);
-            diffViewer.setDiff(projectManager.getCurrentDiff());
-            reviewPanel.setReview("AI review not connected yet.");
-            promptPanel.setPrompt("Next step: connect OpenAI API.");
+            automaticReviewPipeline.fileChanged(changedFile);
         }));
+    }
+
+    private void subscribeToAutomaticReviews() {
+        automaticReviewPipeline.onReview(response -> runOnUiThread(() ->
+                displayReview(response)));
+        automaticReviewPipeline.onCodexPrompt(prompt -> runOnUiThread(() ->
+                promptPanel.setPrompt(prompt)));
+        automaticReviewPipeline.onDiff(diff -> runOnUiThread(() ->
+                diffViewer.setDiff(diff)));
+        automaticReviewPipeline.onStatusChanged(status -> runOnUiThread(() ->
+                statusBar.setStatus(status)));
     }
 
     private void requestReview() {
@@ -142,9 +157,7 @@ public class MainWindow {
             }
             AIResponse completed = response;
             runOnUiThread(() -> {
-                reviewPanel.setReview("Provider: " + completed.providerName()
-                        + "\nElapsed: " + completed.elapsedTime().toMillis() + " ms\n\n"
-                        + completed.responseText());
+                displayReview(completed);
                 statusBar.setStatus("Provider: " + completed.providerName()
                         + " | Elapsed: " + completed.elapsedTime().toMillis() + " ms");
                 promptPanel.setReviewInProgress(false);
@@ -152,6 +165,16 @@ public class MainWindow {
         }, "ai-review-request");
         requestThread.setDaemon(true);
         requestThread.start();
+    }
+
+    private void displayReview(AIResponse response) {
+        reviewPanel.setReview("Provider: " + response.providerName()
+                + "\nElapsed: " + response.elapsedTime().toMillis() + " ms\n\n"
+                + response.responseText());
+    }
+
+    public void close() {
+        automaticReviewPipeline.close();
     }
 
     private void runOnUiThread(Runnable action) {

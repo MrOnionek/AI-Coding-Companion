@@ -18,6 +18,9 @@ public class App extends Application {
 
     @Override
     public void stop() {
+        if (mainWindow != null) {
+            mainWindow.close();
+        }
         if (context != null) {
             context.projectManager().closeProject();
         }
