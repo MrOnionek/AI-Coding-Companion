@@ -7,9 +7,14 @@ import dev.onion.aicoding.ai.AIRequest;
 import dev.onion.aicoding.ai.AIResponse;
 import dev.onion.aicoding.project.ProjectAnalysis;
 import dev.onion.aicoding.project.ProjectManager;
+import dev.onion.aicoding.prompt.PromptBuilder;
+import dev.onion.aicoding.prompt.ReviewPromptBuilder;
+import dev.onion.aicoding.memory.MemoryManager;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 public class MainWindow {
@@ -19,14 +24,19 @@ public class MainWindow {
     private ReviewPanel reviewPanel;
     private PromptPanel promptPanel;
     private StatusBar statusBar;
+    private MemoryPanel memoryPanel;
     private Stage stage;
     private final ProjectManager projectManager;
     private final AIService aiService;
+    private final PromptBuilder reviewPromptBuilder;
+    private final MemoryManager memoryManager;
     private volatile ProjectAnalysis currentAnalysis;
 
     public MainWindow(AppContext context) {
         this.projectManager = context.projectManager();
         this.aiService = context.aiService();
+        this.reviewPromptBuilder = new ReviewPromptBuilder();
+        this.memoryManager = context.memoryManager();
     }
 
     public void show(Stage stage) {
@@ -36,6 +46,7 @@ public class MainWindow {
         reviewPanel = new ReviewPanel();
         promptPanel = new PromptPanel();
         statusBar = new StatusBar();
+        memoryPanel = new MemoryPanel();
         promptPanel.setOnReview(this::requestReview);
 
         BorderPane root = new BorderPane();
@@ -43,7 +54,10 @@ public class MainWindow {
 
         root.setLeft(sidebar);
         root.setCenter(diffViewer);
-        root.setRight(reviewPanel);
+        VBox rightPanels = new VBox(reviewPanel, memoryPanel);
+        VBox.setVgrow(reviewPanel, Priority.ALWAYS);
+        VBox.setVgrow(memoryPanel, Priority.ALWAYS);
+        root.setRight(rightPanels);
         root.setBottom(promptPanel);
 
         BorderPane outer = new BorderPane();
@@ -74,19 +88,27 @@ public class MainWindow {
     }
 
     private void subscribeToProjectEvents() {
-        projectManager.onProjectOpened(project -> runOnUiThread(() ->
-                stage.setTitle("AI Coding Companion - " + project.path().getFileName())));
+        memoryManager.onMemoryChanged(memory ->
+                runOnUiThread(() -> memoryPanel.setMemory(memory)));
+        projectManager.onProjectOpened(project -> {
+            memoryManager.openProject(project.path());
+            runOnUiThread(() ->
+                    stage.setTitle("AI Coding Companion - " + project.path().getFileName()));
+        });
         projectManager.onProjectClosed(() -> runOnUiThread(() ->
         {
             stage.setTitle("AI Coding Companion");
             currentAnalysis = null;
             sidebar.clearProjectSummary();
+            memoryPanel.clear();
         }));
-        projectManager.onProjectAnalyzed(analysis ->
+        projectManager.onProjectAnalyzed(analysis -> {
+            memoryManager.recordAnalysis(analysis);
                 runOnUiThread(() -> {
                     currentAnalysis = analysis;
                     sidebar.setProjectAnalysis(analysis);
-                }));
+                });
+        });
         projectManager.onStatusChanged(status ->
                 runOnUiThread(() -> statusBar.setStatus(status)));
         projectManager.onFileChanged(changedFile -> runOnUiThread(() -> {
@@ -109,10 +131,10 @@ public class MainWindow {
         Thread requestThread = new Thread(() -> {
             AIResponse response;
             try {
-                response = aiService.send(new AIRequest(
-                        "You are a senior Java code reviewer. Give a concise, actionable review.",
-                        userPrompt, formatAnalysis(currentAnalysis),
-                        projectManager.getCurrentDiff()));
+                AIRequest request = reviewPromptBuilder.build(currentAnalysis,
+                        memoryManager.currentMemory(),
+                        projectManager.getCurrentDiff(), userPrompt);
+                response = aiService.send(request);
             } catch (Exception e) {
                 response = new AIResponse("AI request failed: " + e.getMessage(),
                         java.time.Duration.ZERO, providerName,
@@ -130,28 +152,6 @@ public class MainWindow {
         }, "ai-review-request");
         requestThread.setDaemon(true);
         requestThread.start();
-    }
-
-    private String formatAnalysis(ProjectAnalysis analysis) {
-        var summary = analysis.summary();
-        var info = summary.projectInfo();
-        return """
-                Project: %s
-                Path: %s
-                Git repository: %s
-                Build system: %s
-                Technologies: %s
-                Java files: %d
-                Packages: %s
-                Declarations: %s
-                Entry points: %s
-                Important classes: %s
-                Largest files: %s
-                """.formatted(info.name(), info.absolutePath(), info.gitRepository(),
-                info.buildSystem(), analysis.detectedTechnologies(),
-                summary.totalJavaFiles(), summary.packageNames(),
-                analysis.declarationCounts(), analysis.entryPoints(),
-                analysis.importantClasses(), analysis.largestJavaFiles());
     }
 
     private void runOnUiThread(Runnable action) {

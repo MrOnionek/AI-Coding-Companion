@@ -35,20 +35,10 @@ public class ChatGPTProvider implements AIProvider {
                     started, OptionalLong.empty());
         }
         try {
-            String input = """
-                    Project Analysis:
-                    %s
-
-                    Git Diff:
-                    %s
-
-                    User Prompt:
-                    %s
-                    """.formatted(request.projectSummary(), request.gitDiff(),
-                    request.userPrompt());
             String body = """
                     {"model":"gpt-4.1-mini","instructions":"%s","input":"%s"}
-                    """.formatted(escapeJson(request.systemPrompt()), escapeJson(input));
+                    """.formatted(escapeJson(request.systemPrompt()),
+                    escapeJson(request.userPrompt()));
             HttpRequest httpRequest = HttpRequest.newBuilder(RESPONSES_API)
                     .timeout(Duration.ofMinutes(2))
                     .header("Authorization", "Bearer " + System.getenv("OPENAI_API_KEY"))
