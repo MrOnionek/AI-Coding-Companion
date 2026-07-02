@@ -7,6 +7,7 @@ import dev.onion.aicoding.project.ProjectManager;
 import dev.onion.aicoding.memory.MemoryManager;
 import dev.onion.aicoding.review.ReviewDatabase;
 import dev.onion.aicoding.task.TaskStore;
+import dev.onion.aicoding.search.ProjectSearch;
 
 public class AppContext {
 
@@ -17,6 +18,7 @@ public class AppContext {
     private final MemoryManager memoryManager;
     private final ReviewDatabase reviewDatabase;
     private final TaskStore taskStore;
+    private final ProjectSearch projectSearch;
 
     public AppContext() {
         this.settingsManager = new SettingsManager();
@@ -26,6 +28,7 @@ public class AppContext {
         this.memoryManager = new MemoryManager();
         this.reviewDatabase = new ReviewDatabase();
         this.taskStore = new TaskStore();
+        this.projectSearch = new ProjectSearch();
     }
 
     public SettingsManager settingsManager() {
@@ -54,5 +57,9 @@ public class AppContext {
 
     public TaskStore taskStore() {
         return taskStore;
+    }
+
+    public ProjectSearch projectSearch() {
+        return projectSearch;
     }
 }

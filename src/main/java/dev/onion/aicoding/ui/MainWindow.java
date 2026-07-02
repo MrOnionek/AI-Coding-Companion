@@ -18,6 +18,7 @@ import dev.onion.aicoding.task.TaskPlanner;
 import dev.onion.aicoding.task.TaskStore;
 import dev.onion.aicoding.settings.Settings;
 import dev.onion.aicoding.settings.SettingsManager;
+import dev.onion.aicoding.search.ProjectSearch;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,6 +37,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
@@ -50,6 +53,9 @@ public class MainWindow {
     private ReviewHistoryPanel reviewHistoryPanel;
     private ArchitecturePanel architecturePanel;
     private TaskPanel taskPanel;
+    private SearchPanel searchPanel;
+    private TabPane detailsTabs;
+    private Tab searchTab;
     private Stage stage;
     private BorderPane outer;
     private Toolbar toolbar;
@@ -62,6 +68,7 @@ public class MainWindow {
     private final TaskPlanner taskPlanner = new TaskPlanner();
     private final Settings settings;
     private final SettingsManager settingsManager;
+    private final ProjectSearch projectSearch;
     private final Set<String> changedFiles = new LinkedHashSet<>();
     private final AtomicBoolean manualReviewRunning = new AtomicBoolean();
     private volatile String latestCodexPrompt = "";
@@ -72,6 +79,7 @@ public class MainWindow {
         this.projectManager = context.projectManager();
         this.settings = context.settings();
         this.settingsManager = context.settingsManager();
+        this.projectSearch = context.projectSearch();
         this.aiService = context.aiService();
         this.reviewPromptBuilder = new ReviewPromptBuilder();
         this.memoryManager = context.memoryManager();
@@ -100,17 +108,20 @@ public class MainWindow {
         reviewHistoryPanel = new ReviewHistoryPanel(providerNames);
         architecturePanel = new ArchitecturePanel();
         taskPanel = new TaskPanel();
+        searchPanel = new SearchPanel(projectSearch);
         taskPanel.setOnStatusChanged(taskStore::updateStatus);
         reviewHistoryPanel.setSearch(reviewDatabase::search);
         reviewHistoryPanel.setOnReviewSelected(this::restoreReview);
         promptPanel.setOnReview(this::requestReview);
 
-        TabPane detailsTabs = new TabPane(
+        searchTab = tab("Search", searchPanel);
+        detailsTabs = new TabPane(
                 tab("Review", reviewPanel),
                 tab("Memory", memoryPanel),
                 tab("History", reviewHistoryPanel),
                 tab("Architecture", architecturePanel),
-                tab("Tasks", taskPanel));
+                tab("Tasks", taskPanel),
+                searchTab);
         detailsTabs.setMinWidth(300);
 
         SplitPane workspace = new SplitPane(sidebar, diffViewer, detailsTabs);
@@ -131,6 +142,13 @@ public class MainWindow {
         outer.setBottom(statusBar);
 
         Scene scene = new Scene(outer, 1300, 800);
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.P) {
+                detailsTabs.getSelectionModel().select(searchTab);
+                searchPanel.focusSearch();
+                event.consume();
+            }
+        });
         applyVisualSettings();
 
         stage.setTitle("AI Coding Companion");
@@ -190,6 +208,7 @@ public class MainWindow {
         taskStore.onTasksChanged(tasks ->
                 runOnUiThread(() -> taskPanel.setTasks(tasks)));
         projectManager.onProjectOpened(project -> {
+            projectSearch.openProject(project.path());
             memoryManager.openProject(project.path());
             reviewDatabase.openProject(project.path());
             taskStore.openProject(project.path());
@@ -223,6 +242,7 @@ public class MainWindow {
             synchronized (changedFiles) {
                 changedFiles.add(changedFile.toString());
             }
+            projectSearch.fileChanged(changedFile);
             reviewPanel.setStatus(ReviewPanel.ReviewStatus.WAITING);
             automaticReviewPipeline.fileChanged(changedFile);
         }));
@@ -352,6 +372,8 @@ public class MainWindow {
 
     public void close() {
         automaticReviewPipeline.close();
+        projectSearch.close();
+        searchPanel.close();
     }
 
     private void runOnUiThread(Runnable action) {
