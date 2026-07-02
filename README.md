@@ -52,7 +52,7 @@ AI Coding Companion is a desktop application that automatically reviews your cod
 
 
 
-!\[Main Window](docs/screenshot.png)
+!\[Main Window](https://raw.githubusercontent.com/MrOnionek/AI-Coding-Companion/main/docs/screenshot.png)
 
 
 
