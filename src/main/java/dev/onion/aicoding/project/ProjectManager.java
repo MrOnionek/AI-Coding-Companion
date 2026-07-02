@@ -1,5 +1,7 @@
 package dev.onion.aicoding.project;
 
+import dev.onion.aicoding.architecture.ArchitectureAnalyzer;
+import dev.onion.aicoding.architecture.ArchitectureGraph;
 import dev.onion.aicoding.git.GitService;
 import dev.onion.aicoding.settings.Settings;
 import dev.onion.aicoding.settings.SettingsManager;
@@ -24,6 +26,7 @@ public class ProjectManager {
     private Consumer<Path> onFileChanged = path -> { };
     private Consumer<String> onStatusChanged = status -> { };
     private Consumer<ProjectAnalysis> onProjectAnalyzed = analysis -> { };
+    private Consumer<ArchitectureGraph> onArchitectureAnalyzed = graph -> { };
 
     public ProjectManager(Settings settings, SettingsManager settingsManager) {
         this.settings = settings;
@@ -139,6 +142,10 @@ public class ProjectManager {
                 if (project == currentProject) {
                     onProjectAnalyzed.accept(analysis);
                 }
+                ArchitectureGraph graph = new ArchitectureAnalyzer().analyze(project);
+                if (project == currentProject) {
+                    onArchitectureAnalyzed.accept(graph);
+                }
             } catch (IOException e) {
                 if (project == currentProject) {
                     onStatusChanged.accept("Indexing error: " + e.getMessage());
@@ -167,5 +174,9 @@ public class ProjectManager {
 
     public void onProjectAnalyzed(Consumer<ProjectAnalysis> callback) {
         onProjectAnalyzed = callback;
+    }
+
+    public void onArchitectureAnalyzed(Consumer<ArchitectureGraph> callback) {
+        onArchitectureAnalyzed = callback;
     }
 }

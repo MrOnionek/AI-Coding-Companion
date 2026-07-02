@@ -40,6 +40,7 @@ public class MainWindow {
     private StatusBar statusBar;
     private MemoryPanel memoryPanel;
     private ReviewHistoryPanel reviewHistoryPanel;
+    private ArchitecturePanel architecturePanel;
     private Stage stage;
     private final ProjectManager projectManager;
     private final AIService aiService;
@@ -73,6 +74,7 @@ public class MainWindow {
         List<String> providerNames = aiService.getProviders().stream()
                 .map(AIProvider::getName).toList();
         reviewHistoryPanel = new ReviewHistoryPanel(providerNames);
+        architecturePanel = new ArchitecturePanel();
         reviewHistoryPanel.setSearch(reviewDatabase::search);
         reviewHistoryPanel.setOnReviewSelected(this::restoreReview);
         promptPanel.setOnReview(this::requestReview);
@@ -82,10 +84,12 @@ public class MainWindow {
 
         root.setLeft(sidebar);
         root.setCenter(diffViewer);
-        VBox rightPanels = new VBox(reviewPanel, memoryPanel, reviewHistoryPanel);
+        VBox rightPanels = new VBox(
+                reviewPanel, memoryPanel, reviewHistoryPanel, architecturePanel);
         VBox.setVgrow(reviewPanel, Priority.ALWAYS);
         VBox.setVgrow(memoryPanel, Priority.ALWAYS);
         VBox.setVgrow(reviewHistoryPanel, Priority.ALWAYS);
+        VBox.setVgrow(architecturePanel, Priority.ALWAYS);
         root.setRight(rightPanels);
         root.setBottom(promptPanel);
 
@@ -137,6 +141,7 @@ public class MainWindow {
             currentAnalysis = null;
             sidebar.clearProjectSummary();
             memoryPanel.clear();
+            architecturePanel.clear();
         }));
         projectManager.onProjectAnalyzed(analysis -> {
             memoryManager.recordAnalysis(analysis);
@@ -145,6 +150,8 @@ public class MainWindow {
                     sidebar.setProjectAnalysis(analysis);
                 });
         });
+        projectManager.onArchitectureAnalyzed(graph ->
+                runOnUiThread(() -> architecturePanel.setGraph(graph)));
         projectManager.onStatusChanged(status ->
                 runOnUiThread(() -> statusBar.setStatus(status)));
         projectManager.onFileChanged(changedFile -> runOnUiThread(() -> {
